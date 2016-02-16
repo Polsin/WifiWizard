@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Matt Parsons
+ * Copyright 2015 Parag Garg
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,16 +36,18 @@ import android.util.Log;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Arrays;
+import android.location.LocationManager;
 import org.apache.cordova.LOG;
+import android.content.Intent;
+import android.net.Uri;
 
-
+import android.provider.Settings;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 
 import org.apache.cordova.CordovaInterface;
 import org.apache.cordova.CordovaPlugin;
-
 
 public class WifiWizard extends CordovaPlugin {
 private static final String LOG_TAG = "CordovaPermissionHelper";
@@ -76,6 +78,10 @@ private static final String LOG_TAG = "CordovaPermissionHelper";
                             throws JSONException {
 
         this.callbackContext = callbackContext;
+
+        if(!displayLocationSettingsRequest()){
+            callbackContext.error("Gps turned off");
+        }
 
         if(!checkCurrentPermissions()){
             callbackContext.error("permission not found") ;
@@ -199,6 +205,36 @@ private static final String LOG_TAG = "CordovaPermissionHelper";
                         LOG.e(LOG_TAG, "InvocationTargetException when delivering permissions results", invocationTargetException);
                     }
                 }
+
+
+                private boolean displayLocationSettingsRequest() {
+                  Context context=this.cordova.getActivity().getApplicationContext();
+
+                   LocationManager lm = (LocationManager)context.getSystemService(Context.LOCATION_SERVICE);
+                   boolean gps_enabled = false;
+
+
+                   try {
+                       gps_enabled = lm.isProviderEnabled(LocationManager.GPS_PROVIDER);
+                       if(!gps_enabled)
+                        switchToLocationSettings();
+                   } catch(Exception ex) {
+
+
+                   }
+
+                   return gps_enabled;
+
+                }
+
+
+
+ public void switchToLocationSettings() {
+        Log.d(TAG, "Switch to Location Settings");
+        Intent settingsIntent = new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS);
+        cordova.getActivity().startActivity(settingsIntent);
+    }
+
 
 
     /**
