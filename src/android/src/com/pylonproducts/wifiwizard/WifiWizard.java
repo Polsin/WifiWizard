@@ -116,11 +116,20 @@ public class WifiWizard extends CordovaPlugin {
      */
     private boolean addNetwork(CallbackContext callbackContext, JSONArray data) {
         // Initialize the WifiConfiguration object
+
+         try {
+        String password = data.getString(2);
+        String SSID = data.getString(0);
+
+
         WifiConfiguration wifi = new WifiConfiguration();
+                         wifi.SSID =  SSID;
+                        wifi.status = WifiConfiguration.Status.DISABLED;
+                        wifi.priority = 1000;
 
         Log.d(TAG, "WifiWizard: addNetwork entered.");
 
-        try {
+       
             // data's order for ANY object is 0: ssid, 1: authentication algorithm,
             // 2+: authentication information.
             String authType = data.getString(1);
@@ -132,39 +141,104 @@ public class WifiWizard extends CordovaPlugin {
                 // 1: auth
                 // 2: password
                 String newSSID = data.getString(0);
-                wifi.SSID = newSSID;
+                //wifi.SSID = newSSID;
                 String newPass = data.getString(2);
                 wifi.preSharedKey = newPass;
 
-                wifi.status = WifiConfiguration.Status.ENABLED;
-                wifi.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.TKIP);
-                wifi.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.CCMP);
-                wifi.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.WPA_PSK);
-                wifi.allowedPairwiseCiphers.set(WifiConfiguration.PairwiseCipher.TKIP);
-                wifi.allowedPairwiseCiphers.set(WifiConfiguration.PairwiseCipher.CCMP);
+                wifi.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
                 wifi.allowedProtocols.set(WifiConfiguration.Protocol.RSN);
                 wifi.allowedProtocols.set(WifiConfiguration.Protocol.WPA);
+                wifi.allowedAuthAlgorithms.clear();
+                wifi.allowedPairwiseCiphers.set(WifiConfiguration.PairwiseCipher.CCMP);
+                wifi.allowedPairwiseCiphers.set(WifiConfiguration.PairwiseCipher.TKIP);
+                wifi.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.WEP40);
+                wifi.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.WEP104);
+                wifi.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.CCMP);
+                wifi.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.TKIP);
+
 
                 wifi.networkId = ssidToNetworkId(newSSID);
 
                 if ( wifi.networkId == -1 ) {
+
                     wifiManager.addNetwork(wifi);
-                    callbackContext.success(newSSID + " successfully added.");
+                    callbackContext.success(newSSID + " successfully added WPA WIFI ");
                 }
                 else {
                     wifiManager.updateNetwork(wifi);
-                    callbackContext.success(newSSID + " successfully updated.");
+                    callbackContext.success(newSSID + " successfully updated  WPA WIFI ");
                 }
 
                 wifiManager.saveConfiguration();
                 return true;
+
             }
             else if (authType.equals("WEP")) {
                 // TODO: connect/configure for WEP
-                Log.d(TAG, "WEP unsupported.");
-                callbackContext.error("WEP unsupported");
-                return false;
+               
+                    wifi.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
+                    wifi.allowedProtocols.set(WifiConfiguration.Protocol.RSN);
+                    wifi.allowedProtocols.set(WifiConfiguration.Protocol.WPA);
+                    wifi.allowedAuthAlgorithms.set(WifiConfiguration.AuthAlgorithm.OPEN);
+                    wifi.allowedAuthAlgorithms.set(WifiConfiguration.AuthAlgorithm.SHARED);
+                    wifi.allowedPairwiseCiphers.set(WifiConfiguration.PairwiseCipher.CCMP);
+                    wifi.allowedPairwiseCiphers.set(WifiConfiguration.PairwiseCipher.TKIP);
+                    wifi.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.WEP40);
+                    wifi.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.WEP104);
+
+
+                    wifi.wepKeys[0] =password;
+                    wifi.wepTxKeyIndex = 0;
+
+                    wifi.networkId = ssidToNetworkId(SSID);
+
+                if ( wifi.networkId == -1 ) {
+
+                    wifiManager.addNetwork(wifi);
+                    callbackContext.success(SSID + " successfully added. WEP WIFI");
+                }
+                else {
+                    wifiManager.updateNetwork(wifi);
+                    callbackContext.success(SSID + " successfully updated. WEP WIFI");
+                }
+
+                wifiManager.saveConfiguration();
+                return true;
+
             }
+            else if(authType.equals("WPA2")){
+
+                wifi.allowedProtocols.set(WifiConfiguration.Protocol.RSN);
+                wifi.allowedProtocols.set(WifiConfiguration.Protocol.WPA);
+                wifi.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.WPA_PSK);
+                wifi.allowedPairwiseCiphers.set(WifiConfiguration.PairwiseCipher.CCMP);
+                wifi.allowedPairwiseCiphers.set(WifiConfiguration.PairwiseCipher.TKIP);
+                wifi.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.WEP40);
+                wifi.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.WEP104);
+                wifi.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.CCMP);
+                wifi.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.TKIP);
+                wifi.preSharedKey = password;
+
+                wifi.networkId = ssidToNetworkId(SSID);
+
+                if ( wifi.networkId == -1 ) {
+
+                    wifiManager.addNetwork(wifi);
+                    callbackContext.success(SSID + " successfully added WPA2 WIFI ");
+                }
+                else {
+                    wifiManager.updateNetwork(wifi);
+                    callbackContext.success(SSID + " successfully updated  WPA2 WIFI ");
+                }
+
+                wifiManager.saveConfiguration();
+                wifiManager.setWifiEnabled(true);
+                wifiManager.enableNetwork(ssidToNetworkId(SSID),true);
+
+                return true;
+
+            }   
+
             else if (authType.equals("NONE")) {
                 String newSSID = data.getString(0);
                 wifi.SSID = newSSID;
@@ -191,7 +265,7 @@ public class WifiWizard extends CordovaPlugin {
             }
         }
         catch (Exception e) {
-            callbackContext.error(e.getMessage());
+            callbackContext.error(Log.getStackTraceString(e));
             Log.d(TAG,e.getMessage());
             return false;
         }
@@ -268,6 +342,8 @@ public class WifiWizard extends CordovaPlugin {
         if (networkIdToConnect >= 0) {
             // We disable the network before connecting, because if this was the last connection before
             // a disconnect(), this will not reconnect.
+            
+            wifiManager.setWifiEnabled(true);
             wifiManager.disableNetwork(networkIdToConnect);
             wifiManager.enableNetwork(networkIdToConnect, true);
 
