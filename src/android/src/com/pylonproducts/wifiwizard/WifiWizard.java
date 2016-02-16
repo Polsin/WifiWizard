@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Parag Garg
+ * Copyright 2015 Matt Parsons
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -212,7 +212,7 @@ private static final String LOG_TAG = "CordovaPermissionHelper";
 
                    LocationManager lm = (LocationManager)context.getSystemService(Context.LOCATION_SERVICE);
                    boolean gps_enabled = false;
-
+                   if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M){
 
                    try {
                        gps_enabled = lm.isProviderEnabled(LocationManager.GPS_PROVIDER);
@@ -220,7 +220,9 @@ private static final String LOG_TAG = "CordovaPermissionHelper";
                         switchToLocationSettings();
                    } catch(Exception ex) {
 
-
+                   }
+                   }else{
+                    return true;
                    }
 
                    return gps_enabled;
