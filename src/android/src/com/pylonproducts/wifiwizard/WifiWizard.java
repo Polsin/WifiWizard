@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Matt Parsons
+ * Copyright
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,21 @@
 package com.pylonproducts.wifiwizard;
 
 import org.apache.cordova.*;
+
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.PrintStream;
+import java.net.InetSocketAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.security.spec.ECField;
 import java.util.List;
+
+import android.app.IntentService;
 import android.os.Build;
 import android.Manifest;
 import android.content.pm.PackageManager;
@@ -61,16 +75,24 @@ private static final String LOG_TAG = "CordovaPermissionHelper";
     private static final String GET_SCAN_RESULTS = "getScanResults";
     private static final String GET_CONNECTED_SSID = "getConnectedSSID";
     private static final String IS_WIFI_ENABLED = "isWifiEnabled";
+    private static final String CREATE_SERVER = "createServer";
+    private static final String STOP_SERVER = "stopServer";
     private static final String SET_WIFI_ENABLED = "setWifiEnabled";
     private static final String TAG = "WifiWizard";
+    private static final String SOCKET_HANDSHAKE_MESSAGE = "hey, are you asfalio app?";
+    private static final String SOCKET_HANDSHAKE_RESPONSE = "yes";
+    private static  final int port = 7371;
 
     private WifiManager wifiManager;
     private CallbackContext callbackContext;
+    public static CallbackContext socketCallbackContext;
+    public static boolean ShouldStopSocketServer = true;
 
     @Override
     public void initialize(CordovaInterface cordova, CordovaWebView webView) {
         super.initialize(cordova, webView);
         this.wifiManager = (WifiManager) cordova.getActivity().getSystemService(Context.WIFI_SERVICE);
+
     }
 
     @Override
@@ -79,8 +101,28 @@ private static final String LOG_TAG = "CordovaPermissionHelper";
 
         this.callbackContext = callbackContext;
 
+        if(action.equals(CREATE_SERVER)){
+            Log.d(TAG,"createserver called");
+            socketCallbackContext=callbackContext;
+
+            this.cordova.getActivity().runOnUiThread(new Runnable() {
+
+                @Override
+                public void run() {
+                    createServer();
+                }
+            });
+
+           return true;
+        }else if(action.equals(STOP_SERVER)){
+            ShouldStopSocketServer = true;
+            return true;
+        }
+
+
+
         if(!displayLocationSettingsRequest()){
-            callbackContext.error("Gps turned off");
+            callbackContext.error("Android 6 and above Gps turned off");
         }
 
         if(!checkCurrentPermissions()){
@@ -129,6 +171,24 @@ private static final String LOG_TAG = "CordovaPermissionHelper";
         }
 
         return false;
+    }
+
+    public static void  respondToClientSuccess(String message){
+        PluginResult result = new PluginResult(PluginResult.Status.OK, message);
+        result.setKeepCallback(true);
+        socketCallbackContext.sendPluginResult(result);
+    }
+    public static void  respondToClientError(String message){
+        try {
+            PluginResult result = new PluginResult(PluginResult.Status.ERROR, message);
+            result.setKeepCallback(true);
+            socketCallbackContext.sendPluginResult(result);
+        }catch (Exception e){e.printStackTrace();}
+    }
+
+    public void createServer(){
+        ShouldStopSocketServer = false;
+        cordova.getActivity().startService(new Intent(cordova.getActivity(), MyService.class));
     }
 
     public boolean checkCurrentPermissions(){
@@ -216,8 +276,7 @@ private static final String LOG_TAG = "CordovaPermissionHelper";
 
                    try {
                        gps_enabled = lm.isProviderEnabled(LocationManager.GPS_PROVIDER);
-                       if(!gps_enabled)
-                        switchToLocationSettings();
+
                    } catch(Exception ex) {
 
                    }
@@ -230,12 +289,6 @@ private static final String LOG_TAG = "CordovaPermissionHelper";
                 }
 
 
-
- public void switchToLocationSettings() {
-        Log.d(TAG, "Switch to Location Settings");
-        Intent settingsIntent = new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS);
-        cordova.getActivity().startActivity(settingsIntent);
-    }
 
 
 
@@ -553,7 +606,7 @@ private static final String LOG_TAG = "CordovaPermissionHelper";
      *    of the currently configured networks.
      *
      *    @param    callbackContext        A Cordova callback context
-     *    @param    data                JSON Array, with [0] being SSID to connect
+                JSON Array, with [0] being SSID to connect
      *    @return    true if network disconnected, false if failed
      */
     private boolean listNetworks(CallbackContext callbackContext) {
@@ -776,4 +829,99 @@ private static final String LOG_TAG = "CordovaPermissionHelper";
         return false;
     }
 
+
+    public static class MyService extends IntentService {
+        public MyService() {
+            super("MyService");
+        }
+        @Override
+        protected void onHandleIntent(Intent intent) {
+            Log.d(TAG, "onHandleIntent");
+
+            ServerSocket listener = null;
+            try {
+                listener = new ServerSocket();
+                listener.setReuseAddress(true);
+                listener.bind(new InetSocketAddress(port));
+                Log.d(TAG, String.format("listening on port = %d", port));
+                while (true) {
+
+
+
+                    Log.d(TAG, "waiting for client");
+                    Socket socket = listener.accept();
+                    Log.d(TAG, String.format("client connected from: %s", socket.getRemoteSocketAddress().toString()));
+
+                    if(ShouldStopSocketServer){
+                        Log.d(TAG,"stop called");
+                        socket.close();
+
+                        stopSelf();
+                    }
+
+                    if(socketCallbackContext!=null) {
+                        try {
+
+                            respondToClientSuccess("{\"name\":\"" + socket.getRemoteSocketAddress().toString() + "\"}");
+                        }catch (Exception e){
+                            e.printStackTrace();
+                            socket.close();
+
+                            Log.d(TAG,"closing socket");
+                            break;
+
+                        }
+                    }else{
+                        socket.close();
+                        Log.d(TAG,"closing socket");
+                        Log.d(TAG,"callback is null");
+                        break;
+                    }
+                    BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                    PrintStream out = new PrintStream(socket.getOutputStream());
+                    for (String inputLine; (inputLine = in.readLine()) != null;) {
+                        Log.d(TAG, "received");
+                        Log.d(TAG, inputLine);
+                        if(socketCallbackContext!=null) {
+                            try {
+                                respondToClientSuccess("{\"name\":\"" + socket.getRemoteSocketAddress().toString() + "\",\"message\":\"" + inputLine + "\"}");
+                            }
+                            catch (Exception e){
+                                Log.d(TAG,"closing socket");
+                                e.printStackTrace();
+                                respondToClientSuccess("disconnect");
+                                socket.close();
+                            }
+                         }
+                        else{
+                            Log.d(TAG,"closing socket");
+                            socket.close();
+                            Log.d(TAG,"callback is null");
+                        }
+
+                        /*
+                        OutputStream os = socket.getOutputStream();
+                        OutputStreamWriter osw = new OutputStreamWriter(os);
+                        BufferedWriter bw = new BufferedWriter(osw);
+                        bw.write("IamApp");
+                        bw.flush();
+                        */
+
+                        //socketCallbackContext
+                        if(inputLine.equals(SOCKET_HANDSHAKE_MESSAGE)) {
+                            StringBuilder outputStringBuilder = new StringBuilder(SOCKET_HANDSHAKE_RESPONSE);
+                            out.println(outputStringBuilder);
+                        }else{
+                            Log.d(TAG,inputLine);
+                            Log.d(TAG,"unknown message");
+                        }
+
+                    }
+                }
+            } catch(IOException e) {
+                respondToClientError("error");
+                Log.d(TAG, e.toString());
+            }
+        }
+    }
 }
